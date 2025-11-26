@@ -1,0 +1,36 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Playwright browsers & cache
+playwright/.local-browsers/
+playwright/.cache/
+**/playwright/.local-browsers/
+**/playwright/.cache/
+
+# Env / secrets
+.env
+*.env
+
+# Auth / login state / cookies
+auth_threads.json
+auth_master.json
+*.session.json
+
+# VS Code
+.vscode/
+
+# macOS junk
+.DS_Store
+
+# Logs / temp
+*.log
+tmp/
+cache/
