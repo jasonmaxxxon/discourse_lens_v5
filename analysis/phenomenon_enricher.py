@@ -20,6 +20,7 @@ from .phenomenon_fingerprint import (
     NAMESPACE_UUID,
 )
 from .embeddings import embed_text, embedding_hash, EMBED_DIM, EMBED_MODEL
+from database.store import save_analysis_result
 
 logger = logging.getLogger("PhenomenonEnricher")
 
@@ -279,9 +280,9 @@ class PhenomenonEnricher:
         analysis_payload["registry_version"] = REGISTRY_VERSION
 
         try:
+            save_analysis_result(post_id, analysis_payload)
             safe_payload = make_json_safe(
                 {
-                    "analysis_json": analysis_payload,
                     "phenomenon_id": match.phenomenon_id,
                     "phenomenon_status": match.status,
                     "phenomenon_case_id": match.case_id,

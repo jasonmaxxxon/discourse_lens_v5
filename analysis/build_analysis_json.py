@@ -345,22 +345,42 @@ def build_analysis_json(
 
 
 def build_and_validate_analysis_json(
-    post_data: Dict[str, Any],
-    llm_data: Dict[str, Any],
+    post_data: Optional[Dict[str, Any]] = None,
+    llm_data: Optional[Dict[str, Any]] = None,
     cluster_data: Optional[Dict[str, Any]] = None,
     full_report: Optional[str] = None,
 ) -> AnalysisV4:
+    def _looks_like_analysis_payload(payload: Dict[str, Any]) -> bool:
+        if not isinstance(payload, dict):
+            return False
+        if "post" in payload and isinstance(payload.get("post"), dict):
+            return True
+        for key in ("segments", "narrative_stack", "emotional_pulse", "phenomenon"):
+            if key in payload:
+                return True
+        return False
+
     try:
+        if (
+            llm_data is None
+            and cluster_data is None
+            and full_report is None
+            and isinstance(post_data, dict)
+            and _looks_like_analysis_payload(post_data)
+        ):
+            if hasattr(AnalysisV4, "model_validate"):
+                return AnalysisV4.model_validate(post_data)
+            return AnalysisV4.parse_obj(post_data)
         return build_analysis_json(
-            post_data=post_data,
-            llm_data=llm_data,
+            post_data=post_data or {},
+            llm_data=llm_data or {},
             cluster_data=cluster_data,
             full_report=full_report,
         )
     except ValidationError as e:
         logger.error(
             "Failed to validate AnalysisV4 payload",
-            extra={"errors": e.errors(), "post_id": post_data.get("id") or post_data.get("post_id")},
+            extra={"errors": e.errors(), "post_id": safe_dump(post_data).get("id") or safe_dump(post_data).get("post_id")},
         )
         raise
 

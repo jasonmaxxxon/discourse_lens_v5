@@ -5,7 +5,7 @@ This catalog is generated/baselined from `.codex/artifacts/endpoint_map.json`. U
 ## Jobs
 - `GET /api/jobs/` — list jobs (Cache-Control: max-age=2; `x-ops-degraded:1` when serving stale)
 - `GET /api/jobs/{job_id}` — job detail (head + items)
-- `GET /api/jobs/{job_id}/items` — job items (`result_post_id`, stage/status; `x-ops-degraded:1` on degraded)
+- `GET /api/jobs/{job_id}/items` — job items (default limit 200, cap 1000; `result_post_id`, stage/status; `x-ops-degraded:1` on degraded)
 - `GET /api/jobs/{job_id}/summary` — job summary (counters, degraded flag)
 - `POST /api/jobs/` — create job (fails with HTTP status + body; frontends must fail-fast if no jobId)
 

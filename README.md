@@ -14,6 +14,10 @@ Threads 貼文抓取 + 圖片 OCR + Supabase 儲存的輕量控制台（FastAPI 
   - `threads_comments` = source-of-truth（查詢/搜尋/聚類用）
   - `threads_posts.raw_comments` = legacy snapshot，僅供狀態頁/快速預覽
 
+## V6.0 Hardening
+- `analysis_json` 寫入改為單一入口：`database.store.save_analysis_result`（先做 Schema V4 驗證，失敗也會保留 raw payload 供追溯）
+- `/api/jobs/{job_id}/items` 預設最多 200 筆，debug 可帶 `limit` 但上限 1000
+
 ## 重要檔案地圖
 - `webapp/`：API routes + Jinja 模板  
   - `webapp/app.py`：FastAPI app factory（含路由/中介層/模板/exception handler）  
@@ -60,7 +64,7 @@ npm run dev -- --port 5173   # 主入口 http://localhost:5173/
 - Jobs API（JobManager on Supabase job_batches/job_items，進度頁的 SoT）  
   - `POST /api/jobs/`：建立 batch job（pipeline_type + mode + input_config），HTTP 非 2xx 會帶回錯誤 body；前端 fail-fast 若缺 jobId  
   - `GET /api/jobs/{job_id}`：job head + 最多 20 items  
-  - `GET /api/jobs/{job_id}/items`：job_items（stage/status/result_post_id）；DB degraded 時加 `x-ops-degraded: 1` 並回空陣列  
+  - `GET /api/jobs/{job_id}/items`：job_items（預設 limit=200，上限 1000；stage/status/result_post_id）；DB degraded 時加 `x-ops-degraded: 1` 並回空陣列  
   - `GET /api/jobs/{job_id}/summary`：聚合 counters + degraded 標記（同上 header）  
   - `GET /api/status/{job_id}`：legacy in-memory JobResult（仍保留，但 UI 優先用 /api/jobs/**）
 - HTML Console（Jinja）  

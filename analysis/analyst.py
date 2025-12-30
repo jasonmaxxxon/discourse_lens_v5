@@ -26,7 +26,7 @@ from analysis.build_analysis_json import (
 )
 from analysis.phenomenon_enricher import PhenomenonEnricher
 import uuid
-from database.store import update_cluster_metadata
+from database.store import update_cluster_metadata, save_analysis_result
 from analysis.schema import Phenomenon
 
 # --- Configuration ---
@@ -926,12 +926,7 @@ Use this JSON to map cluster_key → tactics/label/summary. Always emit Cluster_
             "raw_json": json_data or {},
             "analysis_version": analysis_version,
             "analysis_build_id": analysis_build_id,
-            "analysis_is_valid": is_valid,
-            "analysis_invalid_reason": invalid_reason or None,
-            "analysis_missing_keys": missing_keys or None,
         }
-        if analysis_payload:
-            update_data["analysis_json"] = analysis_payload
         if quant_summary:
             update_data["quant_summary"] = quant_summary
 
@@ -946,6 +941,8 @@ Use this JSON to map cluster_key → tactics/label/summary. Always emit Cluster_
             },
         )
         try:
+            if analysis_payload is not None:
+                save_analysis_result(post_id, analysis_payload)
             json_safe_payload = _to_json_safe(update_data)
             resp = supabase.table("threads_posts").update(json_safe_payload).eq("id", post_id).execute()
             logger.info(f"✅ Saved to DB: Sector={ai_tags.get('Sector_ID') if ai_tags else 'N/A'}")

@@ -3,11 +3,12 @@ import json
 import hashlib
 import logging
 from typing import Optional, List, Dict, Any
+from datetime import datetime, timezone, date
 from supabase import create_client, Client
 from dotenv import load_dotenv
 from scraper.image_pipeline import process_images_for_post
-from datetime import datetime, timezone
 import requests
+from analysis.build_analysis_json import build_and_validate_analysis_json, validate_analysis_json, safe_dump
 
 # Safety net: load .env on import so SUPABASE_* exist even if uvicorn misses it.
 load_dotenv()
@@ -45,8 +46,58 @@ def _cluster_id(post_id: int | str, cluster_key: int | str) -> str:
     return f"{post_id}::c{cluster_key}"
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {k: _json_safe(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def _normalize_text(val: str) -> str:
     return " ".join((val or "").split()).strip()
+
+
+def save_analysis_result(post_id: int | str, analysis_payload: dict) -> None:
+    invalid_reason: Optional[str] = None
+    missing_keys: Optional[list] = None
+    validated_payload: Optional[dict] = None
+    is_valid = False
+
+    try:
+        validated_model = build_and_validate_analysis_json(analysis_payload)
+        validated_payload = safe_dump(validated_model)
+        is_valid, invalid_reason, missing_keys = validate_analysis_json(validated_model)
+    except Exception as exc:
+        invalid_reason = f"{type(exc).__name__}: {exc}"
+        if hasattr(exc, "errors"):
+            try:
+                missing_keys = [
+                    ".".join(str(part) for part in err.get("loc", []))
+                    for err in (exc.errors() or [])
+                    if err.get("type") in {"missing", "value_error.missing"}
+                ]
+            except Exception:
+                missing_keys = None
+
+    if is_valid and validated_payload is not None:
+        payload = {
+            "analysis_json": validated_payload,
+            "analysis_is_valid": True,
+            "analysis_invalid_reason": None,
+            "analysis_missing_keys": None,
+        }
+    else:
+        payload = {
+            "analysis_json": analysis_payload,
+            "analysis_is_valid": False,
+            "analysis_invalid_reason": invalid_reason or "validation_failed",
+            "analysis_missing_keys": missing_keys or None,
+        }
+
+    supabase.table("threads_posts").update(_json_safe(payload)).eq("id", post_id).execute()
 
 
 def _legacy_comment_id(post_id: str, comment: Dict[str, Any]) -> str:
@@ -436,27 +487,15 @@ def update_post_analysis_forensic(
     """
     Forensic mode: always patch analysis_json if provided (dict), along with meta.
     """
-    payload = {
-        **meta,
-    }
+    # DEPRECATED (CDX-106): analysis_json writes must go through save_analysis_result.
+    payload = dict(meta or {})
     if analysis_json is not None:
-        payload["analysis_json"] = analysis_json
+        save_analysis_result(post_id, analysis_json)
+        for key in ("analysis_json", "analysis_is_valid", "analysis_invalid_reason", "analysis_missing_keys"):
+            payload.pop(key, None)
 
-    headers = {
-        "apikey": supabase_anon_key,
-        "Authorization": f"Bearer {supabase_anon_key}",
-        "Content-Type": "application/json",
-        "Prefer": "return=minimal",
-    }
-
-    r = requests.patch(
-        f"{supabase_url}/rest/v1/threads_posts?id=eq.{post_id}",
-        headers=headers,
-        json=payload,
-        timeout=30,
-    )
-    if not r.ok:
-        raise RuntimeError(f"Supabase analysis PATCH failed: {r.status_code} {r.text[:300]}")
+    if payload:
+        supabase.table("threads_posts").update(_json_safe(payload)).eq("id", post_id).execute()
 
 
 def update_vision_meta(

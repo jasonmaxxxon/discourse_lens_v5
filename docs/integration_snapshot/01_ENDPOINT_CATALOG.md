@@ -5,7 +5,7 @@ Source baseline: `webapp/main.py` (legacy) + `webapp/routers/jobs.py` (Supabase 
 ## JobManager (preferred for progress)
 - `POST /api/jobs/` — create job (pipeline_type/mode/input_config); returns job_id or HTTP error body
 - `GET /api/jobs/{job_id}` — job head + items (degraded header when serving cached/stale)
-- `GET /api/jobs/{job_id}/items` — items ordered by updated_at desc; includes `result_post_id` for progressive links
+- `GET /api/jobs/{job_id}/items` — items ordered by updated_at desc; default limit 200, cap 1000; includes `result_post_id` for progressive links
 - `GET /api/jobs/{job_id}/summary` — counters + degraded flag
 
 ## Legacy (deprecated, compatibility)

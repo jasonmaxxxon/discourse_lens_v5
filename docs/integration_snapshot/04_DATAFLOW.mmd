@@ -13,7 +13,7 @@ flowchart TD
   subgraph Content DB (Supabase)
     C -->|threads_posts + threads_comments ingest| F[threads_posts / threads_comments]
     V -->|update_vision_meta| F
-    E -->|analysis_json/full_report| F
+    E -->|analysis_json/full_report via save_analysis_result| F
   end
 
   subgraph Pipeline B (Discovery -> A-engine)
@@ -35,7 +35,7 @@ flowchart TD
     J[Phenomenon Fingerprint\nanalysis/phenomenon_fingerprint.py]
     K[Phenomenon Enricher (ThreadPool)\nanalysis/phenomenon_enricher.py]
     J -->|fingerprint/case_id| K
-    K -->|patch analysis_json.phenomenon.id/status| F
+    K -->|patch analysis_json.phenomenon.id/status via save_analysis_result| F
   end
   E -. submits bundle .-> J
 
@@ -46,3 +46,4 @@ Notes (Pipeline A Ops bridge):
 - Stages surfaced to `job_items.stage`: init → processing/fetch → vision → analyst → store → completed/failed.
 - Completion gate: item completes only when runner returns a post_id and `threads_posts` row has `analysis_json` or `full_report`; otherwise item fails (analyst/store stage).
 - Vision is soft-fail (logged, continues); Analyst is required (failure bubbles to job_items failed).
+- Analysis payloads are persisted through the single writer `database.store.save_analysis_result` (Schema V4 validation gate + invalid reason capture).

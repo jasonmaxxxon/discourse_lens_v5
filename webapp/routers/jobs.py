@@ -58,10 +58,12 @@ async def get_job_status(job_id: str):
 
 
 @router.get("/{job_id}/items", response_model=List[JobItemPreview])
-async def get_job_items_only(job_id: str, response: Response):
+async def get_job_items_only(job_id: str, response: Response, limit: int = 200):
     manager = JobManager()
+    if limit > 1000:
+        limit = 1000
     try:
-        data, degraded = await manager.get_job_items(job_id, limit=100)
+        data, degraded = await manager.get_job_items(job_id, limit=limit)
     except Exception as e:
         response.headers["x-ops-degraded"] = "1"
         response.headers["Cache-Control"] = "max-age=2"

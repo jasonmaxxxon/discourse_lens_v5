@@ -123,7 +123,9 @@ class JobManager:
         async with self._lock:
             return await self._cached_call(cache_key, 2.0, _call)
 
-    async def get_job_items(self, job_id: str, limit: int = 100) -> Tuple[List[Dict[str, Any]], bool]:
+    async def get_job_items(self, job_id: str, limit: int = 200) -> Tuple[List[Dict[str, Any]], bool]:
+        if limit > 1000:
+            limit = 1000
         cache_key = f"job_items:{job_id}:{limit}"
 
         async def _call():
@@ -132,6 +134,7 @@ class JobManager:
                 .select("*")
                 .eq("job_id", job_id)
                 .order("updated_at", desc=True)
+                .order("id", desc=True)
                 .limit(limit)
                 .execute()
             )

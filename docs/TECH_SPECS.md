@@ -8,7 +8,7 @@
   - Jobs (Supabase-backed JobManager, progressive job_items)
     - `POST /api/jobs/` create job (pipeline_type/mode/input_config); HTTP errors bubble up to caller.
     - `GET /api/jobs/{job_id}` head + 20 items; degraded cache signaled via `x-ops-degraded: 1`.
-    - `GET /api/jobs/{job_id}/items` items ordered by `updated_at desc` including `result_post_id`; degraded header when DB unreachable.
+    - `GET /api/jobs/{job_id}/items` items ordered by `updated_at desc` including `result_post_id`; default limit 200, cap 1000; degraded header when DB unreachable.
     - `GET /api/jobs/{job_id}/summary` counters (total/processed/success/failed/heartbeat) with degraded header.
     - Legacy `GET /api/status/{job_id}` remains for in-memory JOBS compatibility.
   - `GET /api/posts` — latest analyzed posts (analysis_json present).
@@ -27,7 +27,7 @@
 - **Metrics Authority (SoT):** `like_count/reply_count/view_count` are STRICTLY sourced from crawler (`post_data`). AI-generated numbers are treated as hallucinations and discarded during fusion.
 - **Extraction Logic:** Robust regex extraction for `L1/L2/L3` headers (colon/dash/space, case-insensitive) stopping at section boundaries.
 - **Validation:** `analysis/build_analysis_json.py` uses `build_and_validate_analysis_json` to enforce Schema V4 (Pydantic), rejecting payloads that fail "Garbage Logic" checks (e.g., missing keys, hallucinated metrics).
-- **Outputs:** Persisted to Supabase `threads_posts.analysis_json` and rendered as `reports/Analysis_<Post_ID>.md`.
+- **Outputs:** Persisted via `database.store.save_analysis_result` to `threads_posts.analysis_json` and rendered as `reports/Analysis_<Post_ID>.md`.
 
 ## Frontend (dlcs-ui, Vite + React)
 - Dev: `npm run dev -- --port 5173` (backend at http://127.0.0.1:8000).
