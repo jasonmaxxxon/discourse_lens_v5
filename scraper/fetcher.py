@@ -5,6 +5,7 @@ import json
 from typing import Any, Dict
 
 from scraper.scroll_utils import scroll_until_stable
+from scraper.parser import extract_data_from_html
 
 AUTH_FILE = "auth_threads.json"
 
@@ -298,6 +299,13 @@ def fetch_page_html(url: str, target_comment_blocks: int = 80) -> dict:
             except Exception as e:
                 print(f"⚠️ extract_metrics error: {e}")
 
+            replies_count = 0
+            try:
+                replies_count = int(metrics.get("replies") or 0)
+            except Exception:
+                replies_count = 0
+            target_comment_blocks = min(max(replies_count + 10, 60), 200)
+
             try:
                 snap = capture_archive_snapshot(page, url)
                 archive_html = snap.get("archive_html") or ""
@@ -331,6 +339,43 @@ def fetch_page_html(url: str, target_comment_blocks: int = 80) -> dict:
         "metrics": metrics,
         "archive_html": archive_html if 'archive_html' in locals() else "",
         "archive_dom_json": archive_dom_json if 'archive_dom_json' in locals() else {},
+    }
+
+
+def fetch_thread(url: str, *, max_comments=None, high_engagement: bool = True):
+    """
+    V6-compatible entrypoint expected by pipelines/core.py
+    - uses DOM scroll/click to capture HTML (fast, robust)
+    - parses comments via scraper.parser.extract_data_from_html
+    - returns the standard payload: post_payload/comments_payload/metrics/images
+    """
+    url = normalize_url(url)
+
+    # 1) open + deep scroll (DOM)
+    html_payload = fetch_page_html(url, target_comment_blocks=60)
+
+    # 2) parse HTML -> structured post/comments
+    parsed = extract_data_from_html(
+        html_payload,
+        url,
+        fetcher_metrics=(html_payload.get("metrics") or {}),
+    )
+
+    comments = parsed.get("comments") or []
+    if max_comments:
+        comments = comments[: int(max_comments)]
+
+    return {
+        "mode": "dom_v6",
+        "url": url,
+        "post_payload": parsed.get("post"),
+        "comments_payload": comments,
+        "metrics": parsed.get("metrics") or {},
+        "images": parsed.get("images") or [],
+        "debug": {
+            "comments_total": len(comments),
+            "archive_snapshot_taken": bool(html_payload.get("archive_snapshot_taken")),
+        },
     }
 
 
