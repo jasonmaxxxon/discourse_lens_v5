@@ -1,0 +1,16 @@
+[
+  {
+    "run_id": "run_fixture_0001",
+    "post_id": "fixture1",
+    "parent_comment_id": "fixture1",
+    "child_comment_id": "c1",
+    "edge_type": "reply"
+  },
+  {
+    "run_id": "run_fixture_0001",
+    "post_id": "fixture1",
+    "parent_comment_id": "c1",
+    "child_comment_id": "c2",
+    "edge_type": "reply"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "run_id": "run_fixture_0001",
+  "crawled_at_utc": "2025-01-10T12:00:00Z",
+  "post_url": "https://www.threads.net/@user/post/fixture1",
+  "post_id": "fixture1",
+  "fetcher_version": "v15",
+  "run_dir": "tests/fixtures/v15_golden",
+  "raw_html_initial_path": "",
+  "raw_html_final_path": "",
+  "raw_cards_path": ""
+}

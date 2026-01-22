@@ -1,0 +1,42 @@
+[
+  {
+    "run_id": "run_fixture_0001",
+    "crawled_at_utc": "2025-01-10T12:00:00Z",
+    "post_id": "fixture1",
+    "post_url": "https://www.threads.net/@user/post/fixture1",
+    "comment_id": "c1",
+    "parent_comment_id": "fixture1",
+    "author_handle": "user_a",
+    "text": "Congrats!",
+    "time_token": "36m",
+    "approx_created_at_utc": "2025-01-10T11:24:00Z",
+    "like_count": 12,
+    "reply_count_ui": 0,
+    "repost_count_ui": 0,
+    "share_count_ui": 0,
+    "metrics_confidence": "exact",
+    "source": "main",
+    "comment_images": []
+  },
+  {
+    "run_id": "run_fixture_0001",
+    "crawled_at_utc": "2025-01-10T12:00:00Z",
+    "post_id": "fixture1",
+    "post_url": "https://www.threads.net/@user/post/fixture1",
+    "comment_id": "c2",
+    "parent_comment_id": "c1",
+    "author_handle": "user_b",
+    "text": "Nice one.",
+    "time_token": "30m",
+    "approx_created_at_utc": "2025-01-10T11:30:00Z",
+    "like_count": 1,
+    "reply_count_ui": 0,
+    "repost_count_ui": 0,
+    "share_count_ui": 0,
+    "metrics_confidence": "partial",
+    "source": "drill",
+    "comment_images": [
+      "https://image.cdn.example/abc.jpg"
+    ]
+  }
+]

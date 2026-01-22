@@ -1,49 +1,10 @@
-```mermaid
 flowchart TD
-  subgraph Ops Job System (Pipeline A)
-    UI[Logistics Dashboard\n/ops/jobs] -->|POST /api/jobs| JM[JobManager\nwebapp/services/job_manager.py]
-    JM -->|claim + stage: fetch/vision/analyst/store| RAJ[run_pipeline_a_job\nwebapp/services/pipeline_runner.py]
-    RAJ -->|ingest| C[pipelines/core.py\nrun_pipeline]
-    RAJ -->|vision (soft-fail)| V[VisionGate + TwoStageVisionWorker\nanalysis/vision_*]
-    RAJ -->|analyst (required)| E[Analyst\nanalysis/analyst.py]
-    RAJ -->|complete_job_item(p_result_post_id)| JM
-    JM -->|job_items.stage + status| UI
-  end
-
-  subgraph Content DB (Supabase)
-    C -->|threads_posts + threads_comments ingest| F[threads_posts / threads_comments]
-    V -->|update_vision_meta| F
-    E -->|analysis_json/full_report via save_analysis_result| F
-  end
-
-  subgraph Pipeline B (Discovery -> A-engine)
-    B1[Discovery\nkeyword/account] --> B2[Dedup + reprocess policy]
-    B2 -->|invoke Pipeline A per URL (ingest/full, threadpool)| C
-  end
-
-  subgraph Overnight Batch Runner (Safe Mode)
-    BR[tools/batch_runner.py\nstateful queue] --> BRDISC[discover_thread_urls\nkeyword]
-    BRDISC --> BRDED[resume state + dedupe]
-    BRDED -->|invoke run_pipeline per URL with jitter/retries| C
-  end
-
-  F -->|GET /api/posts| G[Archive UI\nArchivePage/PostSelector]
-  F -->|GET /api/analysis-json/{post}| H[NarrativeDetailPage\nuseNarrativeAnalysis]
-  F -->|GET /api/analysis/{post}| I[RawReportCard]
-
-  subgraph Async Enrichment
-    J[Phenomenon Fingerprint\nanalysis/phenomenon_fingerprint.py]
-    K[Phenomenon Enricher (ThreadPool)\nanalysis/phenomenon_enricher.py]
-    J -->|fingerprint/case_id| K
-    K -->|patch analysis_json.phenomenon.id/status via save_analysis_result| F
-  end
-  E -. submits bundle .-> J
-
-  JM -->|GET /api/jobs, /items, /summary| UI
-```
-
-Notes (Pipeline A Ops bridge):
-- Stages surfaced to `job_items.stage`: init → processing/fetch → vision → analyst → store → completed/failed.
-- Completion gate: item completes only when runner returns a post_id and `threads_posts` row has `analysis_json` or `full_report`; otherwise item fails (analyst/store stage).
-- Vision is soft-fail (logged, continues); Analyst is required (failure bubbles to job_items failed).
-- Analysis payloads are persisted through the single writer `database.store.save_analysis_result` (Schema V4 validation gate + invalid reason capture).
+  A[Threads URL] --> B[Fetcher v15\nscraper/fetcher.py]
+  B --> C[run_dir artifacts]
+  C --> D[ingest_run\nwebapp/services/ingest_sql.py]
+  D --> E[threads_posts_raw]
+  D --> F[threads_posts]
+  D --> G[threads_comments]
+  D --> H[threads_comment_edges]
+  G --> I[Quant/Cluster/Embedding]
+  H --> I

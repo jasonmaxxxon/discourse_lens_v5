@@ -7,3 +7,8 @@ numpy
 plotly
 pandas
 python-dotenv>=1.0.0
+emoji
+beautifulsoup4
+playwright==1.57.0
+requests
+supabase

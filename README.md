@@ -27,6 +27,7 @@ Threads 貼文抓取 + 圖片 OCR + Supabase 儲存的輕量控制台（FastAPI 
 - `analysis/analyst.py`：核心邏輯，縫合「爬蟲數據」與「AI 分析」，含 L1/L2/L3 提取與 metrics 組裝
 - `analysis/phenomenon_fingerprint.py` / `analysis/phenomenon_enricher.py`：CDX-044.1 現象指紋與非阻塞 Match-or-Mint
 - `analysis/embeddings.py`：現象向量嵌入（deterministic placeholder，用於 hybrid match/mint）
+- `analysis/v7/utils/text_preprocess.py`：嵌入前一致化處理（emoji demojize + 清理），保留原文顯示
 - `pipelines/core.py`：封裝 Pipeline A/B/C 邏輯
 - `scraper/fetcher.py` / `scraper/parser.py`：抓取、解析 Threads HTML
 - `scraper/image_pipeline.py`：圖片下載（暫存）+ OCR + enrich metadata
@@ -52,6 +53,52 @@ npm install
 npm run dev -- --port 5173   # 主入口 http://localhost:5173/
 ```
 環境變數放根目錄 `.env`，不要提交；Threads cookie 存 `auth_threads.json`（勿提交）。勿提交 `.vscode/`、`node_modules/`、`images/`、`dlcs-ui/dist/`。
+
+## Threads Fetcher + Ingest (v15)
+單一入口：`scripts/run_fetcher_and_ingest.py`（fetch + ingest SoT）。
+
+範例（本機）：
+```bash
+python3 scripts/run_fetcher_and_ingest.py "<threads_url>" --headless
+```
+
+Debug artifacts（v15 test runner；不提交 git；僅作 helper/debug）：
+- `manifest.json`（run metadata）
+- `post_payload.json`（parsed post snapshot）
+- `comments_flat.json`（debug-only flat view）
+- `edges.json`（debug-only parent-child edges）
+- `merged_comments_parsed.json`（debug-only tree view）
+- 重要：docker fetcher 只會輸出 run_dir artifacts，**不會**寫入 Supabase。
+
+### Offline Ingest Gate (v15 SoT)
+`ingest_run(run_dir)` 會把 v15 artifacts 寫入 Supabase（threads_posts_raw / threads_posts / threads_comments / threads_comment_edges）。
+
+執行 gate 測試（需要已存在的 run_dir）：
+```bash
+export SUPABASE_URL="..."
+export SUPABASE_KEY="..."
+python3 scripts/gates/gate_ingest_offline_v15.py artifacts/fetcher_test_turbo_v15_linux/run_<ts>
+```
+
+### One-Command Fetch + Ingest
+Fetch 之後立即寫入 Supabase：
+```bash
+export SUPABASE_URL="..."
+export SUPABASE_KEY="..."
+python3 scripts/run_fetcher_and_ingest.py "https://www.threads.net/@nnnnmnnm123456/post/DTw6ZG3ki6q"
+```
+
+Docker 一鍵：
+```bash
+docker run --rm \
+  -e SUPABASE_URL="..." \
+  -e SUPABASE_KEY="..." \
+  -e URL="https://www.threads.net/@nnnnmnnm123456/post/DTw6ZG3ki6q" \
+  -v /Users/tung/Desktop/DiscourseLens_V6:/app \
+  -w /app \
+  discourse-lens:local \
+  python3 scripts/run_fetcher_and_ingest.py "$URL"
+```
 
 ## API（webapp/app.py 現有）
 - Programmatic JSON（預設入口）  
@@ -102,6 +149,12 @@ Legacy /api/run/* 仍存在但已標記 DEPRECATED，請改用 `/api/jobs/` + `/
 - 留言 SoT：`threads_comments`（id text pk, post_id bigint fk -> threads_posts, text, author_handle, like_count, reply_count, created_at, raw_json, inserted_at/updated_at）
 - 留言分群 SoT：`threads_comment_clusters`（id text pk, post_id bigint fk, cluster_key int, label/summary/size/top_comment_ids/centroid_embedding, created_at/updated_at），comments 有 `cluster_id/cluster_key` 連結欄位。
 - 分析：analysis_json(jsonb), analysis_is_valid(bool), analysis_invalid_reason(text), analysis_missing_keys(jsonb), analysis_version(text), analysis_build_id(text), raw_json(jsonb), full_report(text)
+
+## SoT Ingest Tables（Pipeline A v15）
+- `threads_posts_raw`：run-level 審計（run_id/post_id/post_url/crawled_at_utc + raw_html/raw_cards 路徑）
+- `threads_posts`：貼文主表（post_text/metrics/images 等；upsert by url）
+- `threads_comments`：canonical comments（comment_id/text/metrics + run_id/crawled_at_utc/source/time_token/approx_created_at_utc 等）
+- `threads_comment_edges`：reply graph edges（parent_comment_id/child_comment_id/edge_type）
 - 封存：archive_captured_at(timestamptz), archive_build_id(text), archive_dom_json(jsonb), archive_html(text)
 - 其他：ai_tags, quant_summary, cluster_summary 等
 
@@ -109,10 +162,37 @@ Legacy /api/run/* 仍存在但已標記 DEPRECATED，請改用 `/api/jobs/` + `/
 - Source-of-truth tables: `threads_comment_clusters` (id = `post_id::c<cluster_key>`, label/summary/size/keywords/top_comment_ids/centroid_embedding) + `threads_comments.cluster_id/cluster_key/cluster_label`.
 - Quant Engine now writes cluster rows + assignments immediately after KMeans; `analysis_json` remains display cache.
 - Cluster persistence is set-based: metadata via RPC `upsert_comment_clusters(post_id, clusters_json)`; assignments via RPC `set_comment_cluster_assignments(post_id, assignments_json)` when `DL_PERSIST_ASSIGNMENTS=1` (default 0 skips assignments but still upserts metadata).
+- Assignment invariant: every comment gets a cluster_key (noise/unassignable -> `-1`), so `threads_comments.cluster_key` is never null after pipeline/hydration. Metadata writeback guarantees non-null label/summary for every cluster row (0..k-1 plus `-1` noise: `Unidentified / Context-External`).
 - Quick probe:
   - `select post_id, count(*) from threads_comment_clusters group by post_id order by count desc limit 5;`
   - `select post_id, count(*) from threads_comments where cluster_id is not null group by post_id order by count desc limit 5;`
   - Join example: `select c.author_handle, c.like_count, c.text, k.cluster_key, k.label from threads_comments c join threads_comment_clusters k on c.cluster_id=k.id where c.post_id=<POST_ID> order by c.like_count desc limit 20;`
+
+### V7 Quant / Naming Audit
+- Embeddings are preprocessed (emoji demojize + cleanup) while UI/audit text remains raw; provenance includes preprocess version + canonical embed text hash.
+
+## Docker Run (Playwright Crawler)
+
+Build and run with Docker Compose (artifacts saved to host via volume mount):
+
+```bash
+docker compose build
+docker compose run --rm crawler
+```
+
+Override the URL:
+
+```bash
+URL="https://www.threads.net/@ptdxdxbg_/post/DTfGWPIkbYD" docker compose run --rm crawler
+```
+
+Start a dev shell container and exec into it:
+
+```bash
+docker compose --profile devshell up -d
+docker compose exec devshell bash
+```
+- Naming (when enabled) always writes staging-only rows, regardless of quant health; raw evidence snapshots are stored alongside evidence IDs for audit.
 
 ### Comment Identity (CDX-061)
 - threads_comments.id stays the legacy hash (stable for existing links); native Threads comment id is stored in source_comment_id for dedupe/traceability. Fallback hash = `sha256(f"{post_id}:{author_handle}:{normalized_text}")`.
@@ -135,6 +215,13 @@ Legacy /api/run/* 仍存在但已標記 DEPRECATED，請改用 `/api/jobs/` + `/
 - `AttributeError ... model_dump`：升級到最新 commit（已改 safe_dump），重啟 backend。
 - `/api/docs 404`：Swagger 在 `/docs`，請用 `http://127.0.0.1:8000/docs`。
 - `rg/watch not found`：mac 安裝 `brew install ripgrep` 或改 `grep -R`。
+
+## Runner Staging Runbook v1.1
+- **Supabase key selection（必須可觀測）**：Runner 使用 `tests/run_v7_axis_live.py`；啟用寫入 `--save_candidates`（Refinement）/ `--save_unexplained`（Discovery，CDX-101R 後）。Key 選擇順序：`SUPABASE_SERVICE_ROLE_KEY` → `SUPABASE_SERVICE_KEY` → `SUPABASE_ANON_KEY` → `SUPABASE_KEY`。Runner 會在建立 client 前先 `_load_env_if_missing()`（讀根目錄 `.env`）。要求：Runner 啟動時必須印出 `supabase_url_host`（只印 domain）與 `supabase_key_name`（只印用緊邊個 key 名稱，不印 value）。
+- **Migration source of truth**：Schema SoT 是 `supabase/migrations/`。若手動 SQL，需在 runbook 記錄「已手動執行的 migration 檔名 + 日期」。驗收：Supabase dashboard 確實看到表（例如 axis_candidates / axis_unexplained），第一次寫入成功後表內可見 row。
+- **Runner input responsibility**：Runner 目前只接受 `--input_json`（file-based），不負責 `--post_id` 拉 DB 或 ingest threads/comments。要跑真實 post，需先 export 成 input json。
+- **comment_id traceability**：comment_id 應由 input_json / SoT 產生，LLM 只負責分數。要求：normalize 後 comment_id backfill（若 item 本身有 comment_id 就保留；否則用 input_text exact match 反查 id，或用 list order fallback），確保 axis_candidates/axis_unexplained 能回溯來源 comment。
+- **Routing rules（Refinement vs Discovery）**：目前已實作 `axis_candidates`（CDX-099B）：High semantic score + Novel → save（需 `--save_candidates`）。將來（CDX-101R）會加入 `axis_unexplained`：Low max axis score + High likes → save（需 `--save_unexplained`）。要求：routing 使用 `if/elif`，並印 log（route=candidate/unexplained/ignored），同時印 `max_score` / `like_count` / `top_axis` / `margin`。
 
 ## Git Hygiene
 - 勿提交：`.env`, `auth_threads.json`, `.vscode/`, `node_modules/`, `images/`, `dlcs-ui/dist/`, `__pycache__/`

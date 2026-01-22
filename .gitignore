@@ -13,6 +13,8 @@ auth_threads.json
 # 防止意外上傳任何含有 creds / secret 字眼的檔案
 *credential*
 *secret*
+*.key
+*.pem
 
 # --- Python ---
 __pycache__/
@@ -31,6 +33,8 @@ logs/
 *.sqlite
 *.db
 dump.rdb
+*.har
+*.trace.zip
 
 # --- Frontend (Vite/React) ---
 dlcs-ui/node_modules/
@@ -53,3 +57,11 @@ reports/*
 
 # Ignore temp analysis files if any
 *.tmp
+
+# --- Crawler/Playwright Artifacts ---
+artifacts/*
+!artifacts/.gitkeep
+**/raw_html/**
+**/raw_cards/**
+.chrome_runtime/**
+playwright/.cache/**

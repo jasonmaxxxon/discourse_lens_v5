@@ -21,6 +21,12 @@
   - `/api/debug/latest-post` selects latest row with analysis_json/full_report snapshot.
   - `/api/analysis/{post_id}` selects full_report.
 
+### threads_posts_raw (run-level audit)
+- Added by migration `supabase/migrations/20260122045035_20260122_pipeline_a_sot_fix.sql`.
+- Columns: `run_id`, `post_id` (external Threads id), `post_url`, `crawled_at_utc`, `fetcher_version`, `run_dir`, `raw_html_*_path`, `raw_cards_path`, `created_at`.
+- Writers: `webapp/services/ingest_sql.py` via `ingest_run(run_dir)`.
+- Purpose: immutable run audit; does not drive clustering/analysis directly.
+
 ### narrative_phenomena (registry)
 - Added by migration `database/migrations/2025-phenomenon-registry.sql`.
 - Columns: `id` (uuid, no default), `canonical_name`, `description`, `embedding` vector(1536) legacy, `embedding_v768` vector(768, Google text-embedding-004 SoT), `status` (default PROVISIONAL), `minted_by_case_id` (uuid), `occurrence_count` (int NOT NULL DEFAULT 0), `created_at` (timestamptz), `updated_at` (timestamptz).
@@ -38,12 +44,23 @@
 - Readers: `/api/comments/by-post`, `/api/comments/search`, quant/cluster joins.
 - Indices: post_id, author_handle, created_at, source_comment_id (partial), parent_source_comment_id (partial), unique (post_id, source_comment_id) partial to prevent duplicate native IDs.
 
+### threads_comment_edges (reply graph)
+- Added by migration `supabase/migrations/20260122045035_20260122_pipeline_a_sot_fix.sql`.
+- Columns: `run_id`, `post_id` (bigint FK to threads_posts), `parent_comment_id`, `child_comment_id`, `edge_type`, `created_at`.
+- Writers: `webapp/services/ingest_sql.py` via `ingest_run(run_dir)`.
+- Purpose: rebuild reply graph; `parent_comment_id == post_id` represents L1.
+
 ### threads_comment_clusters (cluster registry)
 - Added by migration `database/migrations/2025-threads-comment-clusters.sql`.
 - Columns: id (text PK), post_id (bigint FK -> threads_posts), cluster_key (int), label, summary, size (int), top_comment_ids (jsonb), keywords (jsonb/text[]), tactics (text[]), tactic_summary (text), centroid_embedding_384 vector(384) (SBERT), centroid_embedding vector(1536) reserved, created_at, updated_at.
 - Writers: cluster upsert helpers in `database/store.py`; quant_engine persists Layer 0.5; Analyst writes tactics/tactic_summary back after AnalysisV4.
 - Readers: cross-post cluster analysis.
 - Indices: unique(post_id, cluster_key), embedding ivfflat, trigram label.
+
+### cluster_naming_staging (naming audit)
+- Added by migration `supabase/migrations/20260105_cluster_naming_staging.sql`.
+- Columns: post_id, cluster_key, run_id, quant_health, backend_name/params, model_provider/name, prompt_hash, label, summary, evidence_comment_ids (jsonb), raw_evidence (jsonb).
+- Writers: `analysis/v7/naming/gemini_flash.py` (staging-only, no SoT writes).
 
 ## Migrations Inventory
 - `database/migrations/20250101_cdx_083a_fix_increment_occurrence_rpc.sql`:

@@ -1,0 +1,26 @@
+services:
+  crawler:
+    build: .
+    volumes:
+      - .:/app
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: "/app"
+    command:
+      - bash
+      - -lc
+      - |
+        : "$${URL:?ERROR: URL is required. Usage: URL='https://www.threads.net/@.../post/...' docker compose run --rm crawler}"
+        python3 scripts/run_fetcher_and_ingest.py "$$URL" --headless
+
+  devshell:
+    build: .
+    volumes:
+      - .:/app
+    working_dir: /app
+    env_file:
+      - .env
+    profiles: ["devshell"]
+    command: ["bash", "-lc", "tail -f /dev/null"]
